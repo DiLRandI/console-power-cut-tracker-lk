@@ -15,7 +15,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"example.com/test/model"
+	"github.com/DiLRandI/console-power-cut-tracker-lk/model"
+	"github.com/TwiN/go-color"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
@@ -103,21 +104,37 @@ func printTable(response []*model.Response) {
 			getTime(r.StartTime),
 			getTime(r.EndTime),
 			duration(r.StartTime, r.EndTime),
-			timeTill(r.StartTime))
+			timeTill(r.StartTime, r.EndTime))
 		printVerticalLine(tw)
 	}
 	tw.Flush()
 }
 
-func timeTill(s string) string {
+func timeTill(s, e string) string {
 	st, err := time.ParseInLocation("2006-01-02T15:04:05", s, time.Local)
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	fmt.Println(st)
+
+	et, err := time.ParseInLocation("2006-01-02T15:04:05", e, time.Local)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
 	now := time.Now()
-	fmt.Println(now)
-	totalSecs := int64(st.Sub(now).Seconds())
+	if et.Sub(now).Seconds() <= 0 {
+		return color.OverGreen("Passed") + "\t\t\t\t\t\t\t\t"
+	} else if st.Sub(now).Seconds() <= 0 {
+		return color.OverRed("Active") + "\t\t\t\t\t\t\t\t"
+	} else if st.Sub(now).Seconds() <= 600 {
+		return color.OverYellow(getTimeDiffAsString(st, now)) + "\t\t\t\t\t\t\t\t"
+	}
+
+	return getTimeDiffAsString(st, now)
+}
+
+func getTimeDiffAsString(from, to time.Time) string {
+	totalSecs := int64(from.Sub(to).Seconds())
 	hours := totalSecs / 3600
 	minutes := (totalSecs % 3600) / 60
 	seconds := totalSecs % 60
@@ -125,8 +142,17 @@ func timeTill(s string) string {
 	return fmt.Sprintf(" %02d : %02d : %02d", hours, minutes, seconds)
 }
 
-func duration(s1, s2 string) string {
-	return ""
+func duration(start, end string) string {
+	st, err := time.ParseInLocation("2006-01-02T15:04:05", start, time.Local)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	et, err := time.ParseInLocation("2006-01-02T15:04:05", end, time.Local)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	return getTimeDiffAsString(et, st)
 }
 
 func getTime(s string) string {
