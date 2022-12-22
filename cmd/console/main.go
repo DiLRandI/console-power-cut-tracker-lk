@@ -10,19 +10,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/DiLRandI/console-power-cut-tracker-lk/model"
-	"github.com/TwiN/go-color"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
 
 func main() {
 	area := flag.String("area", "T", "Area letter to get the details")
+	_ = flag.Bool("all", false, "Display all areas")
 	flag.Parse()
 
 	form := url.Values{}
@@ -75,12 +73,30 @@ func main() {
 		logrus.Fatal(err)
 	}
 
-	printTable(filterResponse(area, response))
+	filter := filterResponse(area, ptrB(false), response)
+
+	out := ""
+	for _, r := range filter {
+		out = timeTill(r.StartTime, r.EndTime)
+		if strings.ContainsAny(out, "Active") {
+			break
+		} else if strings.ContainsAny(out, "Passed") {
+			continue
+		} else {
+			break
+		}
+	}
+
+	fmt.Print(strings.TrimSpace(out))
 
 }
 
-func filterResponse(area *string, response []*model.Response) []*model.Response {
-	if area == nil {
+func ptrB(b bool) *bool {
+	return &b
+}
+
+func filterResponse(area *string, all *bool, response []*model.Response) []*model.Response {
+	if area == nil || *all {
 		return response
 	}
 
@@ -95,39 +111,24 @@ func filterResponse(area *string, response []*model.Response) []*model.Response 
 	return filtered
 }
 
-func printTable(response []*model.Response) {
-	tw := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
-	printHeaders(tw)
-	for _, r := range response {
-		fmt.Fprintf(tw, "| %s \t| %s \t| %s \t| %s \t| %s \t|\n",
-			r.LoadShedGroupID,
-			getTime(r.StartTime),
-			getTime(r.EndTime),
-			duration(r.StartTime, r.EndTime),
-			timeTill(r.StartTime, r.EndTime))
-		printVerticalLine(tw)
-	}
-	tw.Flush()
-}
-
 func timeTill(s, e string) string {
-	st, err := time.ParseInLocation("2006-01-02T15:04:05", s, time.Local)
+	st, err := getTime(s)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	et, err := time.ParseInLocation("2006-01-02T15:04:05", e, time.Local)
+	et, err := getTime(e)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
 	now := time.Now()
 	if et.Sub(now).Seconds() <= 0 {
-		return color.OverGreen("Passed") + "\t\t\t\t\t\t\t\t"
+		return "Passed"
 	} else if st.Sub(now).Seconds() <= 0 {
-		return color.OverRed("Active") + "\t\t\t\t\t\t\t\t"
+		return "Active"
 	} else if st.Sub(now).Seconds() <= 600 {
-		return color.OverYellow(getTimeDiffAsString(st, now)) + "\t\t\t\t\t\t\t\t"
+		return "|<" + getTimeDiffAsString(st, now)
 	}
 
 	return getTimeDiffAsString(st, now)
@@ -142,40 +143,8 @@ func getTimeDiffAsString(from, to time.Time) string {
 	return fmt.Sprintf(" %02d : %02d : %02d", hours, minutes, seconds)
 }
 
-func duration(start, end string) string {
-	st, err := time.ParseInLocation("2006-01-02T15:04:05", start, time.Local)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	et, err := time.ParseInLocation("2006-01-02T15:04:05", end, time.Local)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	return getTimeDiffAsString(et, st)
-}
-
-func getTime(s string) string {
-	time, err := time.Parse("2006-01-02T15:04:05", s)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	return time.Format("15:04:05")
-}
-
-func printHeaders(tw *tabwriter.Writer) {
-	printVerticalLine(tw)
-	fmt.Fprintf(tw, "| Group Letter \t| Start Time \t| End Time \t|  Duration \t|  Power Cut in \t|\n")
-	printVerticalLine(tw)
-}
-
-func printVerticalLine(tw *tabwriter.Writer) {
-	fmt.Fprintf(tw, "| ------------------ \t"+
-		"| ------------------ \t"+
-		"| ------------------ \t"+
-		"| ------------------ \t"+
-		"| ------------------ \t"+
-		"|\n")
+func getTime(s string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02T15:04:05", s, time.Local)
 }
 
 func getToken(pc []byte) (*string, error) {
