@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -73,14 +74,19 @@ func main() {
 		logrus.Fatal(err)
 	}
 
+	if len(response) == 0 {
+		fmt.Println("No PC today")
+		os.Exit(0)
+	}
+
 	filter := filterResponse(area, ptrB(false), response)
 
 	out := ""
 	for _, r := range filter {
 		out = timeTill(r.StartTime, r.EndTime)
-		if strings.ContainsAny(out, "Active") {
+		if strings.ContainsAny(out, "PC is Active") {
 			break
-		} else if strings.ContainsAny(out, "Passed") {
+		} else if strings.ContainsAny(out, "No more PC today!") {
 			continue
 		} else {
 			break
@@ -124,14 +130,14 @@ func timeTill(s, e string) string {
 
 	now := time.Now()
 	if et.Sub(now).Seconds() <= 0 {
-		return "Passed"
+		return "No more PC today!"
 	} else if st.Sub(now).Seconds() <= 0 {
-		return "Active"
+		return "PC is Active, restore in " + getTimeDiffAsString(et, now)
 	} else if st.Sub(now).Seconds() <= 600 {
-		return "|<" + getTimeDiffAsString(st, now)
+		return "PC In less than 10 mins " + getTimeDiffAsString(st, now)
 	}
 
-	return getTimeDiffAsString(st, now)
+	return "PC In " + getTimeDiffAsString(st, now)
 }
 
 func getTimeDiffAsString(from, to time.Time) string {
